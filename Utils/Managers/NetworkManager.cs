@@ -1,57 +1,98 @@
-﻿// NetworkManager.cs
-using System;
+﻿using GameClient.FormRelated;
+using GameClient.Interfaces;
+using GameClient.Utils;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 
-namespace GameClient.Utils.Managers
+public class NetworkManager : INetworkManager
 {
-    public class NetworkManager
+    private readonly string serverAddress;
+    private readonly int port;
+    private TcpClient client;
+    private StreamReader reader;
+    private StreamWriter writer;
+    public ConsoleLogForm consoleLogForm;
+
+    public event Action<string> OnMessageReceived;
+
+    public NetworkManager(string serverAddress, int port, ConsoleLogForm consoleLogForm)
     {
-        private TcpClient client;
-        private NetworkStream stream;
+        this.serverAddress = serverAddress;
+        this.port = port;
+        this.consoleLogForm = consoleLogForm;
+    }
 
-        public event Action<string> OnMessageReceived;
-
-        public NetworkManager(string serverAddress, int port)
+    public async Task ConnectAsync()
+    {
+        try
         {
-            client = new TcpClient(serverAddress, port);
-            stream = client.GetStream();
+            client = new TcpClient();
+            await client.ConnectAsync(serverAddress, port);
+            var stream = client.GetStream();
+            reader = new StreamReader(stream, Encoding.UTF8);
+            writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
 
-            Thread receiveThread = new Thread(ReceiveState);
-            receiveThread.Start();
-        }
+            Logger.Log("Connected to server.");
 
-        public void SendMessage(string message)
-        {
-            byte[] buffer = Encoding.UTF8.GetBytes(message);
-            stream.Write(buffer, 0, buffer.Length);
-        }
-
-        private void ReceiveState()
-        {
-            try
+            // Start listening for messages
+            _ = Task.Run(async () =>
             {
-                while (true)
+                try
                 {
-                    byte[] buffer = new byte[1024];
-                    int bytesRead = stream.Read(buffer, 0, buffer.Length);
-                    if (bytesRead == 0) break;
+                    while (client.Connected)
+                    {
+                        string message = await reader.ReadLineAsync();
+                        if (message == null) break;
 
-                    string state = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                    OnMessageReceived?.Invoke(state);
+                        OnMessageReceived?.Invoke(message);
+                        Logger.Log($"Received: {message}");
+                    }
                 }
-            }
-            catch
-            {
-                Console.WriteLine("Disconnected from server.");
-            }
+                catch (Exception ex)
+                {
+                    Logger.Log($"Disconnected from server: {ex.Message}");
+                }
+            });
         }
-
-        public void Disconnect()
+        catch (Exception ex)
         {
-            stream?.Close();
-            client?.Close();
+            Logger.Log($"Error connecting to server: {ex.Message}");
         }
     }
+
+
+
+
+    public async Task SendMessageAsync(string message)
+    {
+        if (client?.Connected == true && writer != null)
+        {
+            await writer.WriteLineAsync(message);
+            Logger.Log($"Sent: {message}");
+        }
+        else
+        {
+            Logger.Log("Failed to send message: Not connected to server or writer not initialized.");
+        }
+    }
+
+
+    public void Disconnect()
+    {
+        client?.Close();
+        Logger.Log("Disconnected from server.");
+    }
+
+    public void SendMessage(string message)
+    {
+        if (client?.Connected == true && writer != null)
+        {
+            Task.Run(async () => await SendMessageAsync(message));
+        }
+        else
+        {
+            Logger.Log("Cannot send message: Not connected to the server.");
+        }
+    }
+
 }

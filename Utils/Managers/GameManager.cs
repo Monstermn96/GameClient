@@ -2,12 +2,12 @@
 using System.Collections.Generic;
 using System.Drawing;
 using GameClient.Models;
+using GameClient.Interfaces;
 
 namespace GameClient.Utils.Managers
 {
-    public class GameManager
+    public class GameManager : IGameManager
     {
-        public ConcurrentBag<Player> Players { get; private set; } = new ConcurrentBag<Player>();
         public ConcurrentBag<Bullet> Bullets { get; private set; } = new ConcurrentBag<Bullet>();
 
         public GameManager() { }

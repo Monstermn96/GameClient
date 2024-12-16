@@ -1,10 +1,11 @@
 ﻿using System.Collections.Generic;
 using System.Drawing;
+using GameClient.Interfaces;
 using GameClient.Models;
 
 namespace GameClient.Utils.Managers
 {
-    public class PlayerManager
+    public class PlayerManager : IPlayerManager
     {
         private List<Player> playerList = new List<Player>();
         public IEnumerable<Player> Players => playerList;

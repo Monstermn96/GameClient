@@ -1,25 +1,47 @@
-using System.Drawing;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
-using System.Windows.Forms;
-
-
+using Microsoft.Extensions.DependencyInjection;
+using GameClient.Interfaces;
+using GameClient.Utils.Managers;
+using GameClient.FormRelated;
+using GameClient.Utils;
 
 namespace GameClient
 {
     internal static class Program
     {
-        /// <summary>
-        ///  The main entry point for the application.
-        /// </summary>
+
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new GameClient());
+            ApplicationConfiguration.Initialize();
+
+            var services = ConfigureServices();
+            using var serviceProvider = services.BuildServiceProvider();
+
+            var mainForm = serviceProvider.GetRequiredService<GameClient>();
+            Application.Run(mainForm);
         }
 
+        private static IServiceCollection ConfigureServices()
+        {
+            var services = new ServiceCollection();
+
+            //Logger
+            var consoleLogForm = new ConsoleLogForm();
+            Logger.Initialize(consoleLogForm);
+            services.AddSingleton(consoleLogForm);
+
+            // Register interfaces and implementations
+            services.AddSingleton<IPlayerManager, PlayerManager>();
+            services.AddSingleton<IGameManager, GameManager>();
+
+            // Register NetworkManager with parameters for serverAddress and port
+            services.AddSingleton<INetworkManager>(provider =>
+                new NetworkManager("50.54.113.242", 5555, consoleLogForm)); // Provide serverAddress and port here
+
+            // Register the GameClient form
+            services.AddTransient<GameClient>();
+
+            return services;
+        }
     }
 }
