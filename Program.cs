@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
-using GameClient.Interfaces;
 using GameClient.Utils.Managers;
 using GameClient.FormRelated;
 using GameClient.Utils;
+using GameClient.Interfaces.Managers;
+using GameClient.Interfaces;
+using GameClient.Entities;
 
 namespace GameClient
 {
@@ -32,7 +34,8 @@ namespace GameClient
 
             // Register interfaces and implementations
             services.AddSingleton<IPlayerManager, PlayerManager>();
-            services.AddSingleton<IGameManager, GameManager>();
+            services.AddSingleton<IGameStateManager, GameStateManager>();
+            services.AddSingleton<IGameState, GameState>();
 
             // Register NetworkManager with parameters for serverAddress and port
             services.AddSingleton<INetworkManager>(provider =>

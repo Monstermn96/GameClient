@@ -1,5 +1,5 @@
 ﻿using GameClient.FormRelated;
-using GameClient.Interfaces;
+using GameClient.Interfaces.Managers;
 using Newtonsoft.Json;
 using System.Net.Sockets;
 using System.Text;
@@ -127,6 +127,15 @@ public class NetworkManager : INetworkManager
     {
         try
         {
+            // Strip BOM character (if present) and trim whitespace
+            message = message.Trim().TrimStart('\uFEFF');
+
+            if (string.IsNullOrEmpty(message))
+            {
+                Logger.Log("Empty message received. Skipping processing.");
+                return;
+            }
+
             var jsonObject = JsonConvert.DeserializeObject<object>(message);
             if (jsonObject != null)
             {
@@ -141,19 +150,21 @@ public class NetworkManager : INetworkManager
                 OnJsonReceived?.Invoke(jsonObject);
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
             if (Logger.IsInitialized())
             {
-                Logger.Log("Message is not valid JSON. Processing as plain text.");
+                Logger.Log($"Message is not valid JSON: {ex.Message}. Processing as plain text.");
             }
             else
             {
-                Console.WriteLine("Message is not valid JSON. Processing as plain text.");
+                Console.WriteLine($"Message is not valid JSON: {ex.Message}. Processing as plain text.");
             }
             throw;
         }
     }
+
+
 
     private string SerializeObject(object obj)
     {

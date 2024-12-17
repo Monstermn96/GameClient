@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Drawing;
-using GameClient.Interfaces;
+using GameClient.Interfaces.Managers;
 using GameClient.Models;
 
 namespace GameClient.Utils.Managers

@@ -1,13 +1,13 @@
 using GameClient.Models;
-using GameClient.Interfaces;
 using Newtonsoft.Json;
 using GameClient.FormRelated;
+using GameClient.Interfaces.Managers;
 
 namespace GameClient
 {
     public partial class GameClient : Form
     {
-        private readonly IGameManager gameManager;
+        private readonly IGameStateManager gameStateManager;
         private readonly INetworkManager networkManager;
         private readonly IPlayerManager playerManager;
         private readonly HashSet<Keys> activeKeys = new HashSet<Keys>();
@@ -16,12 +16,12 @@ namespace GameClient
 
         private DateTime lastFrameTime = DateTime.Now;
 
-        public GameClient(INetworkManager networkManager, IPlayerManager playerManager, IGameManager gameManager)
+        public GameClient(INetworkManager networkManager, IPlayerManager playerManager, IGameStateManager gameManager)
         {
             InitializeComponent();
             if (Logger.IsInitialized())
                 Logger.ToggleConsoleLog();
-            this.gameManager = gameManager;
+            this.gameStateManager = gameManager;
             this.networkManager = networkManager;
             this.playerManager = playerManager;
 
@@ -34,18 +34,18 @@ namespace GameClient
             Color playerColor = PromptForColor();
 
             localPlayer = playerManager.CreatePlayer(playerName, playerColor, new PointF(400, 300));
-            networkManager.OnMessageReceived += UpdateFromServer;
             networkManager.OnMessageReceived += HandleServerMessage;
             networkManager.ConnectAsync();
 
             // Serialize the localPlayer into JSON object
             networkManager.SendMessage(JsonConvert.SerializeObject(new
             {
-                Type = "player",
+                Type = "Player",
                 UserName = localPlayer.UserName,
                 Color = ColorToHex(localPlayer.Color),
                 Position = new { X = localPlayer.Position.X, Y = localPlayer.Position.Y }
             }));
+            gameStateManager.AddPlayer(localPlayer.UserName, localPlayer);
 
             Application.Idle += GameLoop;
 
@@ -62,7 +62,7 @@ namespace GameClient
             lastFrameTime = now;
 
             HandleInput(deltaTime);
-            gameManager.UpdateBullets();
+            gameStateManager.UpdateBullets();
             Invalidate();
         }
 
@@ -74,6 +74,7 @@ namespace GameClient
                 Logger.Log($"Server says: {message}");
             }
         }
+
         private void HandleInput(float deltaTime)
         {
             float deltaX = 0, deltaY = 0;
@@ -97,7 +98,7 @@ namespace GameClient
 
                 var movementData = new
                 {
-                    Type = "player",
+                    Type = "Player",
                     UserName = localPlayer.UserName,
                     Position = new { X = localPlayer.Position.X, Y = localPlayer.Position.Y }
                 };
@@ -119,31 +120,6 @@ namespace GameClient
 
 
 
-        private void UpdateFromServer(string serverState)
-        {
-            var serverPlayers = new List<(string Name, string Color, float X, float Y)>();
-            var serverBullets = new List<(float X, float Y, float VelocityX, float VelocityY)>();
-
-            var entries = serverState.Split('|');
-
-            foreach (var entry in entries)
-            {
-                var parts = entry.Split(',');
-                if (parts[0] == "player")
-                {
-                    serverPlayers.Add((parts[1], parts[2], float.Parse(parts[3]), float.Parse(parts[4])));
-                }
-                else if (parts[0] == "bullet")
-                {
-                    serverBullets.Add((float.Parse(parts[2]), float.Parse(parts[3]), float.Parse(parts[4]), float.Parse(parts[5])));
-                }
-            }
-
-            playerManager.SyncPlayersFromServer(serverPlayers);
-            gameManager.UpdateBulletsFromServer(serverBullets);
-            Invalidate();
-        }
-
         private void Shoot()
         {
             float deltaX = crosshairPosition.X - localPlayer.Position.X;
@@ -155,7 +131,7 @@ namespace GameClient
             float velocityY = (deltaY / magnitude) * bulletSpeed;
 
             var bulletData = new Bullet(localPlayer.Position, new PointF(velocityX, velocityY));
-            gameManager.LocalShoot(localPlayer.Position, new PointF(velocityX, velocityY));
+            gameStateManager.LocalShoot(localPlayer.Position, new PointF(velocityX, velocityY));
             networkManager.SendMessage(JsonConvert.SerializeObject(bulletData));
         }
 
@@ -176,13 +152,12 @@ namespace GameClient
             base.OnPaint(e);
             Graphics g = e.Graphics;
 
-            var playersCopy = playerManager.Players.ToList();
-            var bulletsCopy = gameManager.Bullets.ToList();
+            var playerList = gameStateManager.GetPlayersFromServer();
+            var bulletsCopy = gameStateManager.GetBulletsFromServer();
 
-            foreach (var player in playersCopy)
+            foreach (var player in playerList)
             {
-                g.FillEllipse(new SolidBrush(player.Color), player.Position.X, player.Position.Y, 20, 20);
-                g.DrawString(player.UserName, DefaultFont, Brushes.Black, player.Position.X, player.Position.Y - 25);
+                g.FillEllipse(new SolidBrush(player.Value.Color), player.Value.Position.X, player.Value.Position.Y, 20, 20);
             }
 
             foreach (var bullet in bulletsCopy)

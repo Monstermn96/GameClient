@@ -2,7 +2,7 @@
 using System.Drawing;
 using GameClient.Models;
 
-namespace GameClient.Interfaces
+namespace GameClient.Interfaces.Managers
 {
     public interface IPlayerManager
     {

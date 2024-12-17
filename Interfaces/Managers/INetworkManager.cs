@@ -1,4 +1,4 @@
-﻿namespace GameClient.Interfaces
+﻿namespace GameClient.Interfaces.Managers
 {
     public interface INetworkManager
     {
