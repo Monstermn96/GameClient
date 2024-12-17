@@ -28,5 +28,27 @@
                 logTextBox.AppendText(message + Environment.NewLine);
             }
         }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.F1)
+            {
+                ToggleConsoleLogForm();
+                return true; // Indicate that the key has been handled
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private void ToggleConsoleLogForm()
+        {
+            if (Visible)
+            {
+                Hide();
+            }
+            else
+            {
+                Show();
+            }
+        }
     }
 }

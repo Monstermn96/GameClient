@@ -6,9 +6,26 @@ public static class Logger
 
     public static void Initialize(ConsoleLogForm form)
     {
-        consoleLogForm = form;
-        consoleLogForm.FormClosed += (s, e) => consoleLogForm = null; // Set to null when closed
-        consoleLogForm.Show();
+        if (consoleLogForm == null || consoleLogForm.IsDisposed)
+        {
+            consoleLogForm = form;
+
+            if (consoleLogForm.InvokeRequired)
+            {
+                consoleLogForm.Invoke(new Action(() => consoleLogForm.Show()));
+            }
+            else
+            {
+                consoleLogForm.Show();
+            }
+
+            consoleLogForm.FormClosed += (s, e) => consoleLogForm = null;
+        }
+    }
+
+    public static bool IsInitialized()
+    {
+        return consoleLogForm != null && !consoleLogForm.IsDisposed;
     }
 
     public static void Log(string message)

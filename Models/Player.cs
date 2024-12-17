@@ -1,32 +1,26 @@
-﻿// Updated Player.cs for Movement
-using System.Drawing;
+﻿using Newtonsoft.Json;
 
 namespace GameClient.Models
 {
     public class Player
     {
-        public string Name { get; private set; }
+        [JsonProperty("Type")]
+        public string Type = "Player";
+
+        [JsonProperty("UserName")]
+        public string UserName { get; private set; }
+        [JsonProperty("Color")]
         public Color Color { get; private set; }
+        [JsonProperty("Position")]
         public PointF Position { get; set; }
+        [JsonProperty("MovementSpeed")]
         public const float MovementSpeed = 5f;
 
-        public Player(string name, Color color, PointF initialPosition)
+        public Player(string userName, Color color, PointF initialPosition)
         {
-            Name = name;
+            UserName = userName;
             Color = color;
             Position = initialPosition;
         }
-        public void SmoothMove(PointF targetPosition, float lerpFactor = 0.1f)
-        {
-            Position = new PointF(
-                Position.X + (targetPosition.X - Position.X) * lerpFactor,
-                Position.Y + (targetPosition.Y - Position.Y) * lerpFactor
-            );
-        }
-
-        public void MoveUp() => Position = new PointF(Position.X, Position.Y - MovementSpeed);
-        public void MoveDown() => Position = new PointF(Position.X, Position.Y + MovementSpeed);
-        public void MoveLeft() => Position = new PointF(Position.X - MovementSpeed, Position.Y);
-        public void MoveRight() => Position = new PointF(Position.X + MovementSpeed, Position.Y);
     }
 }

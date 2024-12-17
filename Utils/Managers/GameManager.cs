@@ -20,6 +20,10 @@ namespace GameClient.Utils.Managers
                 Bullets.Add(new Bullet(new PointF(b.X, b.Y), new PointF(b.VelocityX, b.VelocityY)));
             }
         }
+        public void LocalShoot(PointF position, PointF velocity)
+        {
+            Bullets.Add(new Bullet(position, velocity));
+        }
 
         public void UpdateBullets()
         {

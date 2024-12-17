@@ -19,8 +19,6 @@
                 {
                     components.Dispose();
                 }
-                renderTimer?.Dispose();
-                inputTimer?.Dispose();
                 networkManager?.Disconnect();
             }
             base.Dispose(disposing);

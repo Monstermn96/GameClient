@@ -8,5 +8,6 @@ namespace GameClient.Interfaces
         ConcurrentBag<Bullet> Bullets { get; }
         void UpdateBullets();
         void UpdateBulletsFromServer(IEnumerable<(float X, float Y, float VelocityX, float VelocityY)> serverBullets);
+        void LocalShoot(PointF position, PointF velocity);
     }
 }

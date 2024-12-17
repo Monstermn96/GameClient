@@ -1,13 +1,7 @@
-
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Windows.Forms;
 using GameClient.Models;
 using GameClient.Interfaces;
+using Newtonsoft.Json;
 using GameClient.FormRelated;
-using GameClient.Utils;
 
 namespace GameClient
 {
@@ -16,33 +10,23 @@ namespace GameClient
         private readonly IGameManager gameManager;
         private readonly INetworkManager networkManager;
         private readonly IPlayerManager playerManager;
-        private readonly System.Windows.Forms.Timer renderTimer;
-        private readonly System.Windows.Forms.Timer inputTimer;
         private readonly HashSet<Keys> activeKeys = new HashSet<Keys>();
         private Point crosshairPosition = new Point(0, 0);
         private Player localPlayer;
 
+        private DateTime lastFrameTime = DateTime.Now;
+
         public GameClient(INetworkManager networkManager, IPlayerManager playerManager, IGameManager gameManager)
         {
             InitializeComponent();
-            
-
-            // Add menu strip
-            MenuStrip menuStrip = new MenuStrip();
-            ToolStripMenuItem viewMenuItem = new ToolStripMenuItem("View");
-            ToolStripMenuItem toggleConsoleLogMenuItem = new ToolStripMenuItem("Toggle Console Log");
-            toggleConsoleLogMenuItem.Click += (s, e) => Logger.ToggleConsoleLog();
-            viewMenuItem.DropDownItems.Add(toggleConsoleLogMenuItem);
-            menuStrip.Items.Add(viewMenuItem);
-            MainMenuStrip = menuStrip;
-            Controls.Add(menuStrip);
-
+            if (Logger.IsInitialized())
+                Logger.ToggleConsoleLog();
             this.gameManager = gameManager;
             this.networkManager = networkManager;
             this.playerManager = playerManager;
 
-            Width = 800;
-            Height = 600;
+            Width = 1920;
+            Height = 1080;
             Text = "Some Multiplayer Game";
             DoubleBuffered = true;
 
@@ -51,21 +35,19 @@ namespace GameClient
 
             localPlayer = playerManager.CreatePlayer(playerName, playerColor, new PointF(400, 300));
             networkManager.OnMessageReceived += UpdateFromServer;
-            //Connect to server
+            networkManager.OnMessageReceived += HandleServerMessage;
             networkManager.ConnectAsync();
-            networkManager.SendMessage($"{playerName}|{ColorToHex(playerColor)}");
 
-            renderTimer = new System.Windows.Forms.Timer { Interval = 12 };
-            renderTimer.Tick += (s, e) =>
+            // Serialize the localPlayer into JSON object
+            networkManager.SendMessage(JsonConvert.SerializeObject(new
             {
-                gameManager.UpdateBullets();
-                Invalidate();
-            };
-            renderTimer.Start();
+                Type = "player",
+                UserName = localPlayer.UserName,
+                Color = ColorToHex(localPlayer.Color),
+                Position = new { X = localPlayer.Position.X, Y = localPlayer.Position.Y }
+            }));
 
-            inputTimer = new System.Windows.Forms.Timer { Interval = 40 };
-            inputTimer.Tick += (s, e) => HandleInput();
-            inputTimer.Start();
+            Application.Idle += GameLoop;
 
             KeyDown += (s, e) => activeKeys.Add(e.KeyCode);
             KeyUp += (s, e) => activeKeys.Remove(e.KeyCode);
@@ -73,28 +55,69 @@ namespace GameClient
             MouseClick += (s, e) => Shoot();
         }
 
-        private void HandleInput()
+        private void GameLoop(object sender, EventArgs e)
         {
-            float deltaX = 0;
-            float deltaY = 0;
+            DateTime now = DateTime.Now;
+            float deltaTime = (float)(now - lastFrameTime).TotalSeconds;
+            lastFrameTime = now;
 
-            foreach (var key in activeKeys)
+            HandleInput(deltaTime);
+            gameManager.UpdateBullets();
+            Invalidate();
+        }
+
+        private void HandleServerMessage(string message)
+        {
+            // Log the message and update UI or game state
+            if (Logger.IsInitialized())
             {
-                switch (key)
-                {
-                    case Keys.W: deltaY -= Player.MovementSpeed; break;
-                    case Keys.S: deltaY += Player.MovementSpeed; break;
-                    case Keys.A: deltaX -= Player.MovementSpeed; break;
-                    case Keys.D: deltaX += Player.MovementSpeed; break;
-                }
+                Logger.Log($"Server says: {message}");
             }
+        }
+        private void HandleInput(float deltaTime)
+        {
+            float deltaX = 0, deltaY = 0;
+            float speed = Player.MovementSpeed * deltaTime * 60;
+
+            if (activeKeys.Contains(Keys.W)) deltaY -= speed;
+            if (activeKeys.Contains(Keys.S)) deltaY += speed;
+            if (activeKeys.Contains(Keys.A)) deltaX -= speed;
+            if (activeKeys.Contains(Keys.D)) deltaX += speed;
 
             if (deltaX != 0 || deltaY != 0)
             {
-                localPlayer.Position = new PointF(localPlayer.Position.X + deltaX, localPlayer.Position.Y + deltaY);
-                networkManager.SendMessage($"player,{localPlayer.Name},{localPlayer.Position.X},{localPlayer.Position.Y}");
+                float magnitude = (float)Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
+                deltaX /= magnitude;
+                deltaY /= magnitude;
+
+                localPlayer.Position = new PointF(
+                    localPlayer.Position.X + deltaX * speed,
+                    localPlayer.Position.Y + deltaY * speed
+                );
+
+                var movementData = new
+                {
+                    Type = "player",
+                    UserName = localPlayer.UserName,
+                    Position = new { X = localPlayer.Position.X, Y = localPlayer.Position.Y }
+                };
+
+                networkManager.SendMessage(JsonConvert.SerializeObject(movementData));
+            }
+
+            // Toggle console log form (F1 key) on UI thread
+            if (activeKeys.Contains(Keys.F1))
+            {
+                this.BeginInvoke(new Action(() =>
+                {
+                    if (Logger.IsInitialized())
+                        Logger.ToggleConsoleLog();
+                }));
+                activeKeys.Remove(Keys.F1); // Prevent repeated toggle
             }
         }
+
+
 
         private void UpdateFromServer(string serverState)
         {
@@ -116,7 +139,6 @@ namespace GameClient
                 }
             }
 
-            // Sync players and bullets
             playerManager.SyncPlayersFromServer(serverPlayers);
             gameManager.UpdateBulletsFromServer(serverBullets);
             Invalidate();
@@ -132,12 +154,13 @@ namespace GameClient
             float velocityX = (deltaX / magnitude) * bulletSpeed;
             float velocityY = (deltaY / magnitude) * bulletSpeed;
 
-            string bulletData = $"bullet,{localPlayer.Name},{localPlayer.Position.X},{localPlayer.Position.Y},{velocityX},{velocityY}";
-            networkManager.SendMessage(bulletData);
+            var bulletData = new Bullet(localPlayer.Position, new PointF(velocityX, velocityY));
+            gameManager.LocalShoot(localPlayer.Position, new PointF(velocityX, velocityY));
+            networkManager.SendMessage(JsonConvert.SerializeObject(bulletData));
         }
 
         private string PromptForName() =>
-            Microsoft.VisualBasic.Interaction.InputBox("Enter your player name:", "Player Setup", "Player");
+            Microsoft.VisualBasic.Interaction.InputBox("Enter your Username:", "Player Setup", "");
 
         private Color PromptForColor()
         {
@@ -159,7 +182,7 @@ namespace GameClient
             foreach (var player in playersCopy)
             {
                 g.FillEllipse(new SolidBrush(player.Color), player.Position.X, player.Position.Y, 20, 20);
-                g.DrawString(player.Name, DefaultFont, Brushes.Black, player.Position.X, player.Position.Y - 25);
+                g.DrawString(player.UserName, DefaultFont, Brushes.Black, player.Position.X, player.Position.Y - 25);
             }
 
             foreach (var bullet in bulletsCopy)
@@ -170,16 +193,5 @@ namespace GameClient
             g.DrawLine(Pens.Black, crosshairPosition.X, crosshairPosition.Y - 10, crosshairPosition.X, crosshairPosition.Y + 10);
             g.DrawLine(Pens.Black, crosshairPosition.X - 10, crosshairPosition.Y, crosshairPosition.X + 10, crosshairPosition.Y);
         }
-
-        protected override void OnFormClosed(FormClosedEventArgs e)
-        {
-            base.OnFormClosed(e);
-
-            // Ensure the ConsoleLogForm is hidden when the main form closes
-            Logger.ToggleConsoleLog();
-
-            Application.Exit(); // Exit the application cleanly
-        }
-
     }
 }
