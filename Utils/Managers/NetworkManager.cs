@@ -1,5 +1,7 @@
 ﻿using GameClient.FormRelated;
 using GameClient.Interfaces.Managers;
+using GameClient.Models;
+using GameClient.Utils.Managers;
 using Newtonsoft.Json;
 using System.Net.Sockets;
 using System.Text;
@@ -15,15 +17,17 @@ public class NetworkManager : INetworkManager
     private StreamWriter writer;
     private Channel<string> messageChannel = Channel.CreateUnbounded<string>();
     public ConsoleLogForm consoleLogForm;
+    private IGameStateManager gameStateManager;
     private bool isConnected => client?.Connected == true;
     public event Action<string> OnMessageReceived;
     public event Action<object> OnJsonReceived; // Event for handling JSON objects
 
-    public NetworkManager(string serverAddress, int port, ConsoleLogForm consoleLogForm)
+    public NetworkManager(string serverAddress, int port, ConsoleLogForm consoleLogForm, IGameStateManager gameStateManager)
     {
         this.serverAddress = serverAddress;
         this.port = port;
         this.consoleLogForm = consoleLogForm;
+        this.gameStateManager = gameStateManager;
     }
 
     public async Task ConnectAsync()
@@ -46,7 +50,7 @@ public class NetworkManager : INetworkManager
             }
 
             // Start message processing
-            _ = Task.Run(() => ProcessMessagesAsync());
+            //_ = Task.Run(() => ProcessMessagesAsync());
 
             // Start listening for messages
             _ = Task.Run(async () => await ListenForMessagesAsync());
@@ -92,7 +96,7 @@ public class NetworkManager : INetworkManager
 
                 if (Logger.IsInitialized())
                 {
-                    Logger.Log($"Received: {message}");
+                    TryProcessJson(message);
                 }
                 else
                 {
@@ -120,14 +124,11 @@ public class NetworkManager : INetworkManager
         }
     }
 
-    /// <summary>
-    /// Attempts to process the message as JSON without breaking the loop on failure.
-    /// </summary>
     private void TryProcessJson(string message)
     {
         try
         {
-            // Strip BOM character (if present) and trim whitespace
+            // Strip BOM character and trim
             message = message.Trim().TrimStart('\uFEFF');
 
             if (string.IsNullOrEmpty(message))
@@ -136,33 +137,115 @@ public class NetworkManager : INetworkManager
                 return;
             }
 
-            var jsonObject = JsonConvert.DeserializeObject<object>(message);
-            if (jsonObject != null)
+            // Deserialize into a Dictionary<string, dynamic>
+            var rootObject = JsonConvert.DeserializeObject<Dictionary<string, dynamic>>(message);
+
+            if (rootObject == null)
             {
-                if (Logger.IsInitialized())
+                Logger.Log("Invalid JSON format.");
+                return;
+            }
+
+            // Iterate through each item in the root object
+            foreach (var entry in rootObject)
+            {
+                string key = entry.Key;
+                dynamic nestedObject = entry.Value;
+
+                // Check if the nested object contains a "Type" property
+                if (nestedObject?.Type != null)
                 {
-                    Logger.Log("Successfully processed message as JSON.");
+                    string type = nestedObject.Type.ToString();
+
+                    switch (type.ToLower())
+                    {
+                        case "player":
+                            HandlePlayerMessage(nestedObject);
+                            break;
+
+                        case "bullet":
+                            HandleBulletMessage(nestedObject);
+                            break;
+
+                        default:
+                            Logger.Log($"Unknown object type '{type}' for key '{key}'.");
+                            break;
+                    }
                 }
                 else
                 {
-                    Console.WriteLine("Successfully processed message as JSON.");
+                    Logger.Log($"Skipping entry '{key}': Missing 'Type' field.");
                 }
-                OnJsonReceived?.Invoke(jsonObject);
             }
         }
         catch (JsonException ex)
         {
-            if (Logger.IsInitialized())
-            {
-                Logger.Log($"Message is not valid JSON: {ex.Message}. Processing as plain text.");
-            }
-            else
-            {
-                Console.WriteLine($"Message is not valid JSON: {ex.Message}. Processing as plain text.");
-            }
-            throw;
+            Logger.Log($"Message is not valid JSON: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Unexpected error: {ex.Message}");
         }
     }
+
+
+    private void HandlePlayerMessage(dynamic jsonObject)
+    {
+        try
+        {
+            // Extract data from the dynamic JSON object
+            string userName = jsonObject.UserName;
+            float x = (float)jsonObject.Position.X;
+            float y = (float)jsonObject.Position.Y;
+
+            // Provide default color if none is included in the JSON
+            Color playerColor = Color.Blue; // Default color
+
+            if (jsonObject.Color != null)
+            {
+                playerColor = Color.FromName((string)jsonObject.Color);
+            }
+
+            // Create the Player object using the required constructor
+            var player = new Player(userName, playerColor, new PointF(x, y));
+
+            // Add player to the game state
+            gameStateManager.AddPlayer(userName, player);
+
+            Logger.Log($"Processed Player: {userName} at Position ({x}, {y}).");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Failed to process Player message: {ex.Message}");
+        }
+    }
+
+
+    private void HandleBulletMessage(dynamic jsonObject)
+    {
+        try
+        {
+            // Extract position and velocity from the dynamic JSON object
+            float x = (float)jsonObject.Position.X;
+            float y = (float)jsonObject.Position.Y;
+            float velocityX = (float)jsonObject.Velocity.X;
+            float velocityY = (float)jsonObject.Velocity.Y;
+
+            // Create the Bullet object using the required constructor
+            var bullet = new Bullet(new PointF(x, y), new PointF(velocityX, velocityY));
+
+            // Add the bullet to the game state
+            gameStateManager.AddBullet(bullet);
+
+            Logger.Log($"Processed Bullet at Position ({x}, {y}) with Velocity ({velocityX}, {velocityY}).");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"Failed to process Bullet message: {ex.Message}");
+        }
+    }
+
+
 
 
 

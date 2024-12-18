@@ -63,6 +63,7 @@ namespace GameClient
 
             HandleInput(deltaTime);
             gameStateManager.UpdateBullets();
+            gameStateManager.GetPlayersFromServer();
             Invalidate();
         }
 
@@ -102,7 +103,7 @@ namespace GameClient
                     UserName = localPlayer.UserName,
                     Position = new { X = localPlayer.Position.X, Y = localPlayer.Position.Y }
                 };
-
+                Invalidate();
                 networkManager.SendMessage(JsonConvert.SerializeObject(movementData));
             }
 

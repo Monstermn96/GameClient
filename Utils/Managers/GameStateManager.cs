@@ -19,6 +19,10 @@ namespace GameClient.Utils.Managers
         {
             gameState.PlayerList.Add(userName, player);
         }
+        public void AddBullet(Bullet bullet)
+        {
+            gameState.BulletList.Add(bullet);
+        }
 
         public void ServerShoot(PointF position, PointF velocity)
         {

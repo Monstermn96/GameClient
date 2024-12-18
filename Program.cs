@@ -39,7 +39,12 @@ namespace GameClient
 
             // Register NetworkManager with parameters for serverAddress and port
             services.AddSingleton<INetworkManager>(provider =>
-                new NetworkManager("50.54.113.242", 5555, consoleLogForm)); // Provide serverAddress and port here
+            {
+                var consoleLogForm = provider.GetRequiredService<ConsoleLogForm>();
+                var gameStateManager = provider.GetRequiredService<IGameStateManager>();
+                return new NetworkManager("50.54.113.242", 5555, consoleLogForm, gameStateManager);
+            });
+            // Provide serverAddress and port here
 
             // Register the GameClient form
             services.AddTransient<GameClient>();

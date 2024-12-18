@@ -7,6 +7,8 @@ namespace GameClient.Interfaces.Managers
     {
         void AddPlayer(string userName, Player player);
         void UpdateBullets();
+
+        void AddBullet(Bullet bullet);
         Dictionary<string, Player> GetPlayersFromServer();
         List<Bullet> GetBulletsFromServer();
         void LocalShoot(PointF position, PointF velocity);

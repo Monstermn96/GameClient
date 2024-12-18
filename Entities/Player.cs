@@ -8,9 +8,9 @@ namespace GameClient.Models
         public string Type = "Player";
 
         [JsonProperty("UserName")]
-        public string UserName { get; private set; }
+        public string UserName { get; set; }
         [JsonProperty("Color")]
-        public Color Color { get; private set; }
+        public Color Color { get; set; }
         [JsonProperty("Position")]
         public PointF Position { get; set; }
         [JsonProperty("MovementSpeed")]
